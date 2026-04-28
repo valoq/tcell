@@ -82,7 +82,13 @@ func (cb *CellBuffer) put(x int, y int, str string, style Style) (string, int) {
 					cb.SetDirty(x-i, y, true)
 				}
 			}
+			// Use the larger of the new and previous widths so wide -> narrow
+			// transitions still mark all cells the previous glyph could have
+			// painted.
 			n := width
+			if c.width > n {
+				n = c.width
+			}
 			if n < 1 {
 				n = 1
 			}
@@ -236,6 +242,14 @@ func (cb *CellBuffer) Fill(r rune, style Style) {
 				if x-d >= 0 {
 					cb.cells[i-d].setDirty(true)
 				}
+			}
+			// Fill writes width 1, so the right-side cleanup span depends
+			// on whatever the previous glyph at this cell could have painted.
+			n := c.width
+			if n < 1 {
+				n = 1
+			}
+			for d := 1; d < n+adjacentRadius; d++ {
 				if x+d < cb.w {
 					cb.cells[i+d].setDirty(true)
 				}
