@@ -72,16 +72,24 @@ func (cb *CellBuffer) put(x int, y int, str string, style Style) (string, int) {
 			str = str[len(cluster):]
 		}
 
-		// Wide characters: we want to mark the "wide" cells
-		// dirty as well as the base cell, to make sure we consider
-		// both cells as dirty together.  We only need to do this
-		// if we're changing content
-		if width > 1 && cl != c.currStr {
-			// Prevent unnecessary bounds checks for first cell, since we already
-			// received that one.
+		// Mark adjacent cells dirty on content change to handle terminals
+		// painting glyphs outside tcell's tracked cell.
+		const adjacentRadius = 2
+		if cl != c.currStr {
 			c.setDirty(true)
-			for i := 1; i < width; i++ {
-				cb.SetDirty(x+i, y, true)
+			for i := 1; i <= adjacentRadius; i++ {
+				if x-i >= 0 {
+					cb.SetDirty(x-i, y, true)
+				}
+			}
+			n := width
+			if n < 1 {
+				n = 1
+			}
+			for i := 1; i < n+adjacentRadius; i++ {
+				if x+i < cb.w {
+					cb.SetDirty(x+i, y, true)
+				}
 			}
 		}
 
@@ -218,9 +226,22 @@ func (cb *CellBuffer) Resize(w, h int) {
 // If either the foreground or background are ColorNone, then the respective
 // color is unchanged.
 func (cb *CellBuffer) Fill(r rune, style Style) {
+	cl := string(r)
+	const adjacentRadius = 2
 	for i := range cb.cells {
 		c := &cb.cells[i]
-		c.currStr = string(r)
+		if c.currStr != cl {
+			x := i % cb.w
+			for d := 1; d <= adjacentRadius; d++ {
+				if x-d >= 0 {
+					cb.cells[i-d].setDirty(true)
+				}
+				if x+d < cb.w {
+					cb.cells[i+d].setDirty(true)
+				}
+			}
+		}
+		c.currStr = cl
 		cs := style
 		if cs.fg == ColorNone {
 			cs.fg = c.currStyle.fg
